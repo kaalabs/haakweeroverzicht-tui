@@ -63,7 +63,7 @@ jobs:
         run: |
           OS=$(uname -s | tr '[:upper:]' '[:lower:]')
           ARCH=$(uname -m)
-          REF_NAME="${GITHUB_REF_NAME:-manual}"
+          REF_NAME="${{ inputs.ref || github.ref_name }}"
 
           ASSET_VERSIONED="haakweeroverzicht-tui-${REF_NAME}-${OS}-${ARCH}.tar.gz"
           ASSET_LATEST="haakweeroverzicht-tui-latest-${OS}-${ARCH}.tar.gz"
@@ -78,7 +78,7 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          $ref = if ($env:GITHUB_REF_NAME) { $env:GITHUB_REF_NAME } else { "manual" }
+          $ref = "${{ inputs.ref || github.ref_name }}"
           $arch = $env:PROCESSOR_ARCHITECTURE.ToLower()
 
           $assetVersioned = "haakweeroverzicht-tui-$ref-windows-$arch.zip"
@@ -115,13 +115,17 @@ jobs:
         run: |
           find release-artifacts -type f -maxdepth 3 -print
 
-      - name: Attach to GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ inputs.ref || github.ref_name }}
-          name: ${{ inputs.ref || github.ref_name }}
-          overwrite_files: true
-          fail_on_unmatched_files: true
-          files: |
-            release-artifacts/**/*.tar.gz
-            release-artifacts/**/*.zip
+      - name: Upload to GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          TAG="${{ inputs.ref || github.ref_name }}"
+
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" --title "$TAG" --notes ""
+          fi
+
+          gh release upload "$TAG" release-artifacts/**/*.tar.gz release-artifacts/**/*.zip --clobber
