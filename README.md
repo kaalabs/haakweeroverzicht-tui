@@ -22,23 +22,15 @@ bun install
 bun run start
 ```
 
-## Install (latest release binaries)
+## Install (turn-key)
 
-**macOS (Apple Silicon)**
-
-```bash
-mkdir -p haakweeroverzicht && cd haakweeroverzicht
-curl -fsSL "https://github.com/kaalabs/haakweeroverzicht-tui/releases/latest/download/haakweeroverzicht-tui-latest-darwin-arm64.tar.gz" | tar -xzf -
-./haakweeroverzicht-tui
-```
-
-**Linux (x86_64)**
+**macOS / Linux**
 
 ```bash
-mkdir -p haakweeroverzicht && cd haakweeroverzicht
-curl -fsSL "https://github.com/kaalabs/haakweeroverzicht-tui/releases/latest/download/haakweeroverzicht-tui-latest-linux-x86_64.tar.gz" | tar -xzf -
-./haakweeroverzicht-tui
+curl -fsSL https://raw.githubusercontent.com/kaalabs/haakweeroverzicht-tui/main/install.sh | sh
 ```
+
+This installs into `~/.local/share/haakweeroverzicht-tui` and creates a launcher at `~/.local/bin/haakweeroverzicht-tui`.
 
 **Windows (amd64)**
 
