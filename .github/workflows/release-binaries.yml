@@ -55,9 +55,15 @@ jobs:
           OS=$(uname -s | tr '[:upper:]' '[:lower:]')
           ARCH=$(uname -m)
           REF_NAME="${GITHUB_REF_NAME:-manual}"
-          ASSET="haakweeroverzicht-tui-${REF_NAME}-${OS}-${ARCH}.tar.gz"
-          tar -czf "$ASSET" -C dist .
-          echo "ASSET=$ASSET" >> "$GITHUB_ENV"
+
+          ASSET_VERSIONED="haakweeroverzicht-tui-${REF_NAME}-${OS}-${ARCH}.tar.gz"
+          ASSET_LATEST="haakweeroverzicht-tui-latest-${OS}-${ARCH}.tar.gz"
+
+          tar -czf "$ASSET_VERSIONED" -C dist .
+          cp -f "$ASSET_VERSIONED" "$ASSET_LATEST"
+
+          echo "ASSET_VERSIONED=$ASSET_VERSIONED" >> "$GITHUB_ENV"
+          echo "ASSET_LATEST=$ASSET_LATEST" >> "$GITHUB_ENV"
 
       - name: Package (Windows)
         if: runner.os == 'Windows'
@@ -65,18 +71,28 @@ jobs:
         run: |
           $ref = if ($env:GITHUB_REF_NAME) { $env:GITHUB_REF_NAME } else { "manual" }
           $arch = $env:PROCESSOR_ARCHITECTURE.ToLower()
-          $asset = "haakweeroverzicht-tui-$ref-windows-$arch.zip"
-          Compress-Archive -Path dist\* -DestinationPath $asset
-          "ASSET=$asset" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+          $assetVersioned = "haakweeroverzicht-tui-$ref-windows-$arch.zip"
+          $assetLatest = "haakweeroverzicht-tui-latest-windows-$arch.zip"
+
+          Compress-Archive -Path dist\* -DestinationPath $assetVersioned
+          Copy-Item -Force $assetVersioned $assetLatest
+
+          "ASSET_VERSIONED=$assetVersioned" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "ASSET_LATEST=$assetLatest" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ runner.os }}-${{ runner.arch }}
-          path: ${{ env.ASSET }}
+          path: |
+            ${{ env.ASSET_VERSIONED }}
+            ${{ env.ASSET_LATEST }}
 
       - name: Attach to GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: ${{ env.ASSET }}
+          files: |
+            ${{ env.ASSET_VERSIONED }}
+            ${{ env.ASSET_LATEST }}
