@@ -22,7 +22,6 @@ need_cmd() {
 }
 
 need_cmd curl
-need_cmd tar
 
 OS_RAW=$(uname -s 2>/dev/null || echo unknown)
 ARCH_RAW=$(uname -m 2>/dev/null || echo unknown)
@@ -32,14 +31,76 @@ ARCH=$(echo "$ARCH_RAW" | tr '[:upper:]' '[:lower:]')
 
 case "$OS" in
   darwin)
+    OS="darwin"
+    ;;
+  linux)
+    OS="linux"
+    ;;
+  mingw*|msys*|cygwin*)
+    OS="windows"
+    ;;
+  *)
+    echo "Unsupported OS: $OS_RAW" >&2
+    echo "This installer supports macOS, Linux, and Windows (via Git Bash/MSYS2/Cygwin/WSL)." >&2
+    exit 1
+    ;;
+esac
+
+normalize_arch() {
+  raw="$1"
+  os="$2"
+
+  case "$raw" in
+    x86_64|amd64)
+      if [ "$os" = "windows" ]; then
+        echo "amd64"
+      else
+        echo "x86_64"
+      fi
+      ;;
+    aarch64|arm64)
+      echo "arm64"
+      ;;
+    *)
+      echo "$raw"
+      ;;
+  esac
+}
+
+ARCH=$(normalize_arch "$ARCH" "$OS")
+
+# Optional overrides for debugging / cross-install.
+if [ -n "${TARGET_OS:-}" ]; then
+  OS="$TARGET_OS"
+fi
+if [ -n "${TARGET_ARCH:-}" ]; then
+  ARCH="$TARGET_ARCH"
+fi
+
+case "$OS" in
+  darwin|linux)
+    need_cmd tar
+    EXT="tar.gz"
+    ;;
+  windows)
+    EXT="zip"
+    ;;
+  *)
+    echo "Unsupported OS after normalization: $OS" >&2
+    exit 1
+    ;;
+esac
+
+# Try a few candidate asset names for compatibility.
+ASSET_CANDIDATES=""
+case "$OS" in
+  darwin)
     case "$ARCH" in
       arm64)
-        ASSET="haakweeroverzicht-tui-latest-darwin-arm64.tar.gz"
+        ASSET_CANDIDATES="haakweeroverzicht-tui-latest-darwin-arm64.tar.gz"
         ;;
-      x86_64|amd64)
-        echo "No prebuilt macOS x86_64 artifact is published currently." >&2
-        echo "Use an Apple Silicon Mac, or build from source." >&2
-        exit 1
+      x86_64)
+        ASSET_CANDIDATES="haakweeroverzicht-tui-latest-darwin-x86_64.tar.gz"
         ;;
       *)
         echo "Unsupported macOS architecture: $ARCH_RAW" >&2
@@ -49,13 +110,11 @@ case "$OS" in
     ;;
   linux)
     case "$ARCH" in
-      x86_64|amd64)
-        ASSET="haakweeroverzicht-tui-latest-linux-x86_64.tar.gz"
+      x86_64)
+        ASSET_CANDIDATES="haakweeroverzicht-tui-latest-linux-x86_64.tar.gz"
         ;;
-      aarch64|arm64)
-        echo "No prebuilt Linux arm64 artifact is published currently." >&2
-        echo "Build from source or add a Linux arm64 runner to the release workflow." >&2
-        exit 1
+      arm64)
+        ASSET_CANDIDATES="haakweeroverzicht-tui-latest-linux-arm64.tar.gz haakweeroverzicht-tui-latest-linux-aarch64.tar.gz"
         ;;
       *)
         echo "Unsupported Linux architecture: $ARCH_RAW" >&2
@@ -63,14 +122,21 @@ case "$OS" in
         ;;
     esac
     ;;
-  *)
-    echo "Unsupported OS: $OS_RAW" >&2
-    echo "This installer supports macOS and Linux. On Windows, use WSL/Git Bash or download the .zip from releases." >&2
-    exit 1
+  windows)
+    case "$ARCH" in
+      amd64)
+        ASSET_CANDIDATES="haakweeroverzicht-tui-latest-windows-amd64.zip haakweeroverzicht-tui-latest-windows-x86_64.zip"
+        ;;
+      arm64)
+        ASSET_CANDIDATES="haakweeroverzicht-tui-latest-windows-arm64.zip"
+        ;;
+      *)
+        echo "Unsupported Windows architecture: $ARCH_RAW" >&2
+        exit 1
+        ;;
+    esac
     ;;
 esac
-
-URL="https://github.com/${REPO}/releases/latest/download/${ASSET}"
 
 TMP_DIR=$(mktemp -d 2>/dev/null || mktemp -d -t haakweeroverzicht)
 cleanup() {
@@ -78,23 +144,67 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-ARCHIVE_PATH="$TMP_DIR/$ASSET"
+ARCHIVE_PATH="$TMP_DIR/archive.$EXT"
 
-echo "Downloading: $URL"
-curl -fsSL "$URL" -o "$ARCHIVE_PATH"
+downloaded="0"
+for ASSET in $ASSET_CANDIDATES; do
+  URL="https://github.com/${REPO}/releases/latest/download/${ASSET}"
+  echo "Downloading: $URL"
+  if curl -fsSL "$URL" -o "$ARCHIVE_PATH"; then
+    downloaded="1"
+    break
+  fi
+  rm -f "$ARCHIVE_PATH" 2>/dev/null || true
+  echo "  (not found)" >&2
+done
+
+if [ "$downloaded" != "1" ]; then
+  echo "No matching release asset found for OS=$OS ARCH=$ARCH." >&2
+  echo "Tried:" >&2
+  for ASSET in $ASSET_CANDIDATES; do
+    echo "  - $ASSET" >&2
+  done
+  exit 1
+fi
 
 echo "Installing to: $INSTALL_DIR"
 rm -rf "$INSTALL_DIR"
 mkdir -p "$INSTALL_DIR"
 
-tar -xzf "$ARCHIVE_PATH" -C "$INSTALL_DIR"
+if [ "$EXT" = "tar.gz" ]; then
+  tar -xzf "$ARCHIVE_PATH" -C "$INSTALL_DIR"
+elif [ "$EXT" = "zip" ]; then
+  if command -v unzip >/dev/null 2>&1; then
+    unzip -q "$ARCHIVE_PATH" -d "$INSTALL_DIR"
+  elif command -v powershell.exe >/dev/null 2>&1; then
+    powershell.exe -NoProfile -Command "Expand-Archive -Force '$ARCHIVE_PATH' '$INSTALL_DIR'" >/dev/null
+  elif command -v powershell >/dev/null 2>&1; then
+    powershell -NoProfile -Command "Expand-Archive -Force '$ARCHIVE_PATH' '$INSTALL_DIR'" >/dev/null
+  else
+    echo "Missing required command to unpack zip: unzip or powershell" >&2
+    exit 1
+  fi
+else
+  echo "Unsupported archive type: $EXT" >&2
+  exit 1
+fi
+
+BIN_NAME="haakweeroverzicht-tui"
+if [ "$OS" = "windows" ]; then
+  BIN_NAME="haakweeroverzicht-tui.exe"
+fi
+
+if [ ! -f "$INSTALL_DIR/$BIN_NAME" ]; then
+  echo "Install failed: '$BIN_NAME' not found in $INSTALL_DIR" >&2
+  exit 1
+fi
 
 mkdir -p "$BIN_DIR"
 LAUNCHER="$BIN_DIR/haakweeroverzicht-tui"
 
 cat > "$LAUNCHER" <<SH
 #!/bin/sh
-cd "$INSTALL_DIR" && exec ./haakweeroverzicht-tui "\$@"
+cd "$INSTALL_DIR" && exec ./$BIN_NAME "\$@"
 SH
 
 chmod +x "$LAUNCHER"

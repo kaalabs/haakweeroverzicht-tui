@@ -24,7 +24,7 @@ bun run start
 
 ## Install (turn-key)
 
-**macOS / Linux**
+**macOS / Linux / Windows (Git Bash / WSL)**
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/kaalabs/haakweeroverzicht-tui/main/install.sh | sh
@@ -32,7 +32,9 @@ curl -fsSL https://raw.githubusercontent.com/kaalabs/haakweeroverzicht-tui/main/
 
 This installs into `~/.local/share/haakweeroverzicht-tui` and creates a launcher at `~/.local/bin/haakweeroverzicht-tui`.
 
-**Windows (amd64)**
+On Windows, run the command from Git Bash/MSYS2/Cygwin (or from WSL). The installer auto-detects the correct `latest` release asset.
+
+**Windows (native)**
 
 - Download `haakweeroverzicht-tui-latest-windows-amd64.zip` from the latest release.
 - Unzip and run `haakweeroverzicht-tui.exe`.
