@@ -123,9 +123,10 @@ jobs:
           set -euo pipefail
 
           TAG="${{ inputs.ref || github.ref_name }}"
+          REPO="${GITHUB_REPOSITORY}"
 
-          if ! gh release view "$TAG" >/dev/null 2>&1; then
-            gh release create "$TAG" --title "$TAG" --notes ""
+          if ! gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
+            gh release create "$TAG" --repo "$REPO" --title "$TAG" --notes ""
           fi
 
-          gh release upload "$TAG" release-artifacts/**/*.tar.gz release-artifacts/**/*.zip --clobber
+          gh release upload "$TAG" --repo "$REPO" release-artifacts/**/*.tar.gz release-artifacts/**/*.zip --clobber
