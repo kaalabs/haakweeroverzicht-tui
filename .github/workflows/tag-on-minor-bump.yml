@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: write
+  actions: write
 
 jobs:
   tag:
@@ -83,3 +84,17 @@ jobs:
 
           git tag -a "$TAG" -m "$TAG"
           git push origin "$TAG"
+
+      - name: Trigger release binaries workflow
+        if: steps.decide.outputs.should_tag == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          TAG="${{ steps.decide.outputs.new_tag }}"
+
+          curl -sSfL -X POST \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/release-binaries.yml/dispatches" \
+            -d "{\"ref\":\"${TAG}\"}"
