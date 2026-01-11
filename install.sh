@@ -9,6 +9,11 @@ DEFAULT_BIN_DIR="$HOME/.local/bin"
 INSTALL_DIR="${INSTALL_DIR:-$DEFAULT_INSTALL_DIR}"
 BIN_DIR="${BIN_DIR:-$DEFAULT_BIN_DIR}"
 
+if [ -z "$INSTALL_DIR" ] || [ "$INSTALL_DIR" = "/" ]; then
+  echo "Refusing to install into INSTALL_DIR='$INSTALL_DIR'" >&2
+  exit 1
+fi
+
 if [ "${ALLOW_ROOT:-0}" != "1" ] && [ "$(id -u)" -eq 0 ]; then
   echo "Refusing to run as root. Re-run as a normal user (or set ALLOW_ROOT=1)." >&2
   exit 1
@@ -168,8 +173,25 @@ if [ "$downloaded" != "1" ]; then
 fi
 
 echo "Installing to: $INSTALL_DIR"
-rm -rf "$INSTALL_DIR"
+
+# Preserve user data across upgrades.
+PRESERVE_DATA_DIR="$INSTALL_DIR/data"
+PRESERVED_DATA_TMP="$TMP_DIR/data"
+
 mkdir -p "$INSTALL_DIR"
+
+if [ -d "$PRESERVE_DATA_DIR" ]; then
+  rm -rf "$PRESERVED_DATA_TMP" 2>/dev/null || true
+  mv "$PRESERVE_DATA_DIR" "$PRESERVED_DATA_TMP"
+fi
+
+# Remove everything except the preserved data dir.
+# (Avoids deleting user data when upgrading.)
+find "$INSTALL_DIR" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+
+if [ -d "$PRESERVED_DATA_TMP" ]; then
+  mv "$PRESERVED_DATA_TMP" "$PRESERVE_DATA_DIR"
+fi
 
 if [ "$EXT" = "tar.gz" ]; then
   tar -xzf "$ARCHIVE_PATH" -C "$INSTALL_DIR"

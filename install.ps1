@@ -140,12 +140,32 @@ try {
   Write-Note "Downloaded: $downloadUrl"
   Write-Note "Installing to: $InstallDir"
 
+  $preserveDataDir = Join-Path $InstallDir 'data'
+  $tempDataDir = Join-Path $tempDir 'data'
+  $hadData = $false
+
+  # Preserve user data across upgrades.
   if (Test-Path -LiteralPath $InstallDir) {
-    Remove-Item -Recurse -Force -LiteralPath $InstallDir
+    if (Test-Path -LiteralPath $preserveDataDir) {
+      if (Test-Path -LiteralPath $tempDataDir) {
+        Remove-Item -Recurse -Force -LiteralPath $tempDataDir
+      }
+      Move-Item -Force -LiteralPath $preserveDataDir -Destination $tempDataDir
+      $hadData = $true
+    }
+
+    Get-ChildItem -LiteralPath $InstallDir -Force | ForEach-Object {
+      Remove-Item -Recurse -Force -LiteralPath $_.FullName
+    }
   }
-  New-Item -ItemType Directory -Path $InstallDir | Out-Null
+
+  New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
 
   Expand-Archive -Path $archivePath -DestinationPath $InstallDir -Force
+
+  if ($hadData -and (Test-Path -LiteralPath $tempDataDir) -and -not (Test-Path -LiteralPath $preserveDataDir)) {
+    Move-Item -Force -LiteralPath $tempDataDir -Destination $preserveDataDir
+  }
 
   $exePath = Join-Path $InstallDir 'haakweeroverzicht-tui.exe'
   if (-not (Test-Path -LiteralPath $exePath)) {
