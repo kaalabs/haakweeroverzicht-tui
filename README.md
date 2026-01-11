@@ -34,7 +34,15 @@ This installs into `~/.local/share/haakweeroverzicht-tui` and creates a launcher
 
 On Windows, run the command from Git Bash/MSYS2/Cygwin (or from WSL). The installer auto-detects the correct `latest` release asset.
 
-**Windows (native)**
+**Windows (PowerShell)**
+
+```powershell
+irm https://raw.githubusercontent.com/kaalabs/haakweeroverzicht-tui/main/install.ps1 | iex
+```
+
+This installs into `%LOCALAPPDATA%\haakweeroverzicht-tui` and adds `%LOCALAPPDATA%\haakweeroverzicht-tui\bin` to your **user** PATH.
+
+**Windows (native, manual)**
 
 - Download `haakweeroverzicht-tui-latest-windows-amd64.zip` from the latest release.
 - Unzip and run `haakweeroverzicht-tui.exe`.
