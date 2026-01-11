@@ -38,11 +38,18 @@ export function App() {
 
   const [daySelectedIndex, setDaySelectedIndex] = useState<number>(0);
 
+  const [showStartupModal, setShowStartupModal] = useState(true);
+
   const lastSaveRef = useRef<Promise<void>>(Promise.resolve());
 
   useEffect(() => {
     dbRef.current = db;
   }, [db]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setShowStartupModal(false), 2000);
+    return () => clearTimeout(timer);
+  }, []);
 
   const persistDb = useCallback((updater: (prev: Db) => Db) => {
     setDb((prev) => {
@@ -442,6 +449,32 @@ export function App() {
         <text fg="#64748b">Tab: next panel • d: delete city • ↑/↓ or j/k: move day • space/c: toggle checked • q/esc: quit</text>
         <text fg="#a3a3a3">Haakweeroverzicht TUI v{VERSION}</text>
       </box>
+
+      {showStartupModal ? (
+        <box
+          position="absolute"
+          top={0}
+          left={0}
+          width="100%"
+          height="100%"
+          justifyContent="center"
+          alignItems="center"
+          zIndex={1000}
+        >
+          <box
+            border
+            borderStyle="single"
+            borderColor="#22d3ee"
+            backgroundColor="#0b1220"
+            paddingLeft={2}
+            paddingRight={2}
+            paddingTop={1}
+            paddingBottom={1}
+          >
+            <text fg="#e2e8f0">Made with Love for Caroline Kortekaas</text>
+          </box>
+        </box>
+      ) : null}
     </box>
   );
 }
