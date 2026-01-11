@@ -1,0 +1,85 @@
+name: Tag on minor version bump
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout (with tags)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine whether to tag
+        id: decide
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          NEW_VERSION=$(node -p "require('./package.json').version")
+          NEW_TAG="v${NEW_VERSION}"
+
+          # Skip if this tag already exists
+          if git rev-parse "$NEW_TAG" >/dev/null 2>&1; then
+            echo "Tag $NEW_TAG already exists; skipping."
+            echo "should_tag=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          LATEST_TAG=$(git tag -l 'v*' --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1 || true)
+          if [ -z "$LATEST_TAG" ]; then
+            echo "No previous semver tags found; skipping auto-tagging."
+            echo "should_tag=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          OLD_VERSION="${LATEST_TAG#v}"
+
+          IFS='.' read -r OLD_MAJOR OLD_MINOR OLD_PATCH <<< "$OLD_VERSION"
+          IFS='.' read -r NEW_MAJOR NEW_MINOR NEW_PATCH <<< "$NEW_VERSION"
+
+          if [ "$NEW_MAJOR" != "$OLD_MAJOR" ]; then
+            echo "Major changed ($OLD_MAJOR -> $NEW_MAJOR); skipping."
+            echo "should_tag=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          EXPECTED_MINOR=$((OLD_MINOR + 1))
+          if [ "$NEW_MINOR" != "$EXPECTED_MINOR" ]; then
+            echo "Not a minor bump ($OLD_MINOR -> $NEW_MINOR); skipping."
+            echo "should_tag=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ "$NEW_PATCH" != "0" ]; then
+            echo "Minor bump should reset patch to 0 (got $NEW_PATCH); skipping."
+            echo "should_tag=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "Will create tag $NEW_TAG (from $LATEST_TAG)."
+          echo "should_tag=true" >> "$GITHUB_OUTPUT"
+          echo "new_tag=$NEW_TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Create and push tag
+        if: steps.decide.outputs.should_tag == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          TAG="${{ steps.decide.outputs.new_tag }}"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git tag -a "$TAG" -m "$TAG"
+          git push origin "$TAG"
