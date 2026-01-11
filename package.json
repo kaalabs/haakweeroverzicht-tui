@@ -1,0 +1,21 @@
+{
+  "name": "haakweeroverzicht-tui",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "bun run src/main.tsx",
+    "start": "bun run src/main.tsx",
+    "dist:build": "bun run scripts/build-dist.ts"
+  },
+  "dependencies": {
+    "@opentui/core": "^0.1.72",
+    "@opentui/react": "^0.1.72",
+    "react": "^19.2.3"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.5",
+    "@types/react": "^19.2.8",
+    "typescript": "^5.9.3"
+  }
+}
