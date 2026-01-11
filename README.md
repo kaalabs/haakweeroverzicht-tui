@@ -32,6 +32,8 @@ curl -fsSL https://raw.githubusercontent.com/kaalabs/haakweeroverzicht-tui/main/
 
 This installs into `~/.local/share/haakweeroverzicht-tui` and creates a launcher at `~/.local/bin/haakweeroverzicht-tui`.
 
+Re-running the installer upgrades the app while preserving your local data in `data/`.
+
 On Windows, run the command from Git Bash/MSYS2/Cygwin (or from WSL). The installer auto-detects the correct `latest` release asset.
 
 **Windows (PowerShell)**
