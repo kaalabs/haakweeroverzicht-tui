@@ -61,8 +61,9 @@ The `dist/` folder also contains the required OpenTUI native library under `dist
 ## Keybindings
 
 - `Tab`: cycle focus across the 3 panels
+- `c`: open Temp-to-Color matrix config (Esc to save/close)
 - `d`: delete currently selected city (when focus is on **City selector**)
-- `space` or `c`: toggle `checked` for the currently selected day (when focus is on **Historic weather**)
+- `space`: toggle `checked` for the currently selected day (when focus is on **Historic weather**)
 - `q` or `Esc`: quit
 - `Ctrl+C`: quit
 
@@ -72,6 +73,7 @@ The `dist/` folder also contains the required OpenTUI native library under `dist
 - Structure:
   - `cities[]` with `id`, `name`, `latitude`, `longitude`, `timezone`
   - `days[]` per city, with `{ date, tmax, tmin, tavg, checked }`
+  - `tempToColorMatrix[]` with `{ tempH, tempL, color }` (color is user-defined)
 
 ## Notes
 

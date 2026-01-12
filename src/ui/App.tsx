@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ScrollBoxRenderable, SelectOption } from "@opentui/core";
 import { useKeyboard } from "@opentui/react";
-import type { City, Db } from "../db";
+import type { City, Db, TempToColorRow } from "../db";
 import { createEmptyDb, loadDb, saveDb } from "../db";
 import { geocodeTopResult, syncCityHistoricWeather } from "../openMeteo";
 import { VERSION } from "../version";
@@ -25,8 +25,46 @@ function fmtTemp(value: number): string {
   return value.toFixed(1).padStart(6, " ");
 }
 
+function fmtInt(value: number): string {
+  return String(value).padStart(6, " ");
+}
+
+function fmtColorNumber(value: number | null): string {
+  if (value === null) return " --";
+  return String(value).padStart(3, " ");
+}
+
 function toggleCheckedFlag(flag: "Y" | "N"): "Y" | "N" {
   return flag === "Y" ? "N" : "Y";
+}
+
+function colorForTemp(matrix: TempToColorRow[], temp: number): number | null {
+  for (const row of matrix) {
+    const low = Math.min(row.tempL, row.tempH);
+    const high = Math.max(row.tempL, row.tempH);
+    if (temp >= low && temp <= high) return row.color;
+  }
+  return null;
+}
+
+function fmtTempValue(value: number): string {
+  return String(value);
+}
+
+function rangesOverlap(aLow: number, aHigh: number, bLow: number, bHigh: number): boolean {
+  return Math.max(aLow, bLow) <= Math.min(aHigh, bHigh);
+}
+
+function clampIntRange(value: number): number {
+  return Math.max(-50, Math.min(50, value));
+}
+
+function sanitizeIntText(value: string): string {
+  const cleaned = value.replace(/[^\d-]/g, "").replace(/(?!^)-/g, "");
+  if (cleaned === "" || cleaned === "-") return cleaned;
+  const parsed = Number.parseInt(cleaned, 10);
+  if (!Number.isFinite(parsed)) return "";
+  return String(clampIntRange(parsed));
 }
 
 export function App() {
@@ -40,11 +78,25 @@ export function App() {
 
   const [showStartupModal, setShowStartupModal] = useState(true);
 
+  const [showTempToColorModal, setShowTempToColorModal] = useState(false);
+  const [tempToColorDraft, setTempToColorDraft] = useState<TempToColorRow[]>([]);
+  const tempToColorDraftRef = useRef<TempToColorRow[]>([]);
+  const [tempToColorSelectedIndex, setTempToColorSelectedIndex] = useState(0);
+  const [tempToColorError, setTempToColorError] = useState<string | null>(null);
+
+  const [tempToColorIsAdding, setTempToColorIsAdding] = useState(false);
+  const [tempToColorNewRow, setTempToColorNewRow] = useState({ tempH: "", tempL: "", color: "" });
+  const [tempToColorNewRowField, setTempToColorNewRowField] = useState<0 | 1 | 2>(0);
+
   const lastSaveRef = useRef<Promise<void>>(Promise.resolve());
 
   useEffect(() => {
     dbRef.current = db;
   }, [db]);
+
+  useEffect(() => {
+    tempToColorDraftRef.current = tempToColorDraft;
+  }, [tempToColorDraft]);
 
   useEffect(() => {
     const timer = setTimeout(() => setShowStartupModal(false), 2000);
@@ -61,6 +113,101 @@ export function App() {
       return next;
     });
   }, []);
+
+  const openTempToColorModal = useCallback(() => {
+    const current = dbRef.current ?? createEmptyDb();
+    setTempToColorDraft(current.tempToColorMatrix);
+    setTempToColorSelectedIndex(0);
+    setTempToColorError(null);
+    setTempToColorIsAdding(false);
+    setTempToColorNewRow({ tempH: "", tempL: "", color: "" });
+    setTempToColorNewRowField(0);
+    setShowTempToColorModal(true);
+  }, []);
+
+  const saveAndCloseTempToColorModal = useCallback(() => {
+    const draft = tempToColorDraftRef.current;
+    persistDb((prev) => ({ ...prev, tempToColorMatrix: draft }));
+    setShowTempToColorModal(false);
+    setTempToColorIsAdding(false);
+    setTempToColorError(null);
+    setStatus("Saved Temp-to-Color matrix");
+  }, [persistDb]);
+
+  const tryConfirmTempToColorNewRow = useCallback((override?: { color?: string }): boolean => {
+    const tempHText = tempToColorNewRow.tempH.trim();
+    const tempLText = tempToColorNewRow.tempL.trim();
+    const colorText = (override?.color ?? tempToColorNewRow.color).trim();
+
+    if (!tempLText) {
+      setTempToColorError("Temp low is required.");
+      setTempToColorNewRowField(0);
+      return false;
+    }
+
+    if (!tempHText) {
+      setTempToColorError("Temp high is required.");
+      setTempToColorNewRowField(1);
+      return false;
+    }
+
+    if (!colorText) {
+      setTempToColorError("Color code is required.");
+      setTempToColorNewRowField(2);
+      return false;
+    }
+
+    const tempH = Number.parseInt(tempHText, 10);
+    const tempL = Number.parseInt(tempLText, 10);
+    const color = Number.parseInt(colorText, 10);
+
+    if (!Number.isFinite(tempH) || !Number.isFinite(tempL)) {
+      setTempToColorError("Temp high/low must be integers.");
+      return false;
+    }
+
+    if (!Number.isInteger(tempH) || !Number.isInteger(tempL) || !Number.isInteger(color)) {
+      setTempToColorError("Temp high/low/color must be integers.");
+      return false;
+    }
+
+    if (tempH < -50 || tempH > 50 || tempL < -50 || tempL > 50 || color < -50 || color > 50) {
+      setTempToColorError("Temp high/low/color must be in range -50..50.");
+      return false;
+    }
+
+    const newLow = Math.min(tempL, tempH);
+    const newHigh = Math.max(tempL, tempH);
+
+    const existing = tempToColorDraftRef.current;
+    for (const row of existing) {
+      const low = Math.min(row.tempL, row.tempH);
+      const high = Math.max(row.tempL, row.tempH);
+      if (!rangesOverlap(newLow, newHigh, low, high)) continue;
+
+      setTempToColorError(
+        `Range ${fmtTempValue(newLow)}..${fmtTempValue(newHigh)} overlaps existing ${fmtTempValue(low)}..${fmtTempValue(high)} (color "${row.color}")`,
+      );
+      return false;
+    }
+
+    const row: TempToColorRow = { tempH, tempL, color };
+    const idx = tempToColorDraftRef.current.length;
+    setTempToColorDraft((prev) => [...prev, row]);
+    setTempToColorSelectedIndex(idx);
+    setTempToColorIsAdding(false);
+    setTempToColorNewRow({ tempH: "", tempL: "", color: "" });
+    setTempToColorNewRowField(0);
+    setTempToColorError(null);
+    setStatus("Added Temp-to-Color matrix row");
+    return true;
+  }, [tempToColorNewRow]);
+
+  useEffect(() => {
+    if (!showTempToColorModal) return;
+    if (tempToColorSelectedIndex < tempToColorDraft.length) return;
+    setTempToColorSelectedIndex(Math.max(0, tempToColorDraft.length - 1));
+  }, [showTempToColorModal, tempToColorDraft.length, tempToColorSelectedIndex]);
 
   useEffect(() => {
     let cancelled = false;
@@ -311,8 +458,67 @@ export function App() {
   };
 
   useKeyboard((key) => {
+    if (showTempToColorModal) {
+      if (key.name === "escape") {
+        if (tempToColorIsAdding) {
+          setTempToColorIsAdding(false);
+          setTempToColorNewRow({ tempH: "", tempL: "", color: "" });
+          setTempToColorNewRowField(0);
+          setTempToColorError(null);
+          return;
+        }
+        saveAndCloseTempToColorModal();
+        return;
+      }
+
+      if (tempToColorIsAdding) {
+        if (key.name === "tab") {
+          setTempToColorNewRowField((prev) => ((prev + 1) % 3) as 0 | 1 | 2);
+        }
+        return;
+      }
+
+      if (tempToColorDraft.length > 0) {
+        const maxIndex = Math.max(0, tempToColorDraft.length - 1);
+        if (key.name === "up" || key.name === "k") {
+          setTempToColorSelectedIndex((i) => Math.max(0, i - 1));
+          return;
+        }
+        if (key.name === "down" || key.name === "j") {
+          setTempToColorSelectedIndex((i) => Math.min(maxIndex, i + 1));
+          return;
+        }
+      }
+
+      if (key.name === "a" && !key.ctrl && !key.meta) {
+        setTempToColorIsAdding(true);
+        setTempToColorNewRow({ tempH: "", tempL: "", color: "" });
+        setTempToColorNewRowField(0);
+        setTempToColorError(null);
+        return;
+      }
+
+      if (key.name === "d" && !key.ctrl && !key.meta) {
+        if (tempToColorDraft.length === 0) return;
+        setTempToColorDraft((prev) => {
+          const next = prev.filter((_, idx) => idx !== tempToColorSelectedIndex);
+          const nextIndex = Math.max(0, Math.min(tempToColorSelectedIndex, next.length - 1));
+          setTempToColorSelectedIndex(nextIndex);
+          return next;
+        });
+        return;
+      }
+
+      return;
+    }
+
     if (key.ctrl && key.name === "c") {
       exit();
+      return;
+    }
+
+    if (key.name === "c" && !key.ctrl && !key.meta) {
+      openTempToColorModal();
       return;
     }
 
@@ -354,7 +560,7 @@ export function App() {
         return;
       }
 
-      if ((key.name === "space" || key.name === "c") && !key.ctrl && !key.meta) {
+      if (key.name === "space" && !key.ctrl && !key.meta) {
         toggleCheckedForSelectedDay();
         return;
       }
@@ -421,10 +627,10 @@ export function App() {
             borderColor: focus === "weather" ? "#22d3ee" : "#444",
             flexDirection: "column",
           }}
-        >
-          <scrollbox
-            ref={weatherScrollRef}
-            scrollY
+          >
+            <scrollbox
+              ref={weatherScrollRef}
+              scrollY
             scrollX={false}
             viewportCulling
             scrollbarOptions={{ showArrows: true }}
@@ -435,7 +641,8 @@ export function App() {
                 const fg = d.checked === "Y" ? "#22c55e" : "#ef4444";
                 const bg = idx === daySelectedIndex ? "#334155" : "transparent";
                 const prefix = idx === daySelectedIndex ? "▶" : " ";
-                const line = `${prefix} ${d.date}  max ${fmtTemp(d.tmax)}  min ${fmtTemp(d.tmin)}  avg ${fmtTemp(d.tavg)}  checked:${d.checked}`;
+                const mapped = colorForTemp(db?.tempToColorMatrix ?? [], d.tavg);
+                const line = `${prefix} ${d.date}  max ${fmtTemp(d.tmax)}  min ${fmtTemp(d.tmin)}  avg ${fmtTemp(d.tavg)}  clr ${fmtColorNumber(mapped)}  checked:${d.checked}`;
                 return <text key={d.date} fg={fg} bg={bg} content={line} />;
               })}
             </box>
@@ -446,7 +653,7 @@ export function App() {
       </box>
 
       <box style={{ width: "100%", flexDirection: "row", justifyContent: "space-between" }}>
-        <text fg="#64748b">Tab: next panel • d: delete city • ↑/↓ or j/k: move day • space/c: toggle checked • q/esc: quit</text>
+        <text fg="#64748b">Tab: next panel • c: temp-color matrix • d: delete city • ↑/↓ or j/k: move day • space: toggle checked • q/esc: quit</text>
         <text fg="#a3a3a3">Haakweeroverzicht TUI v{VERSION}</text>
       </box>
 
@@ -472,6 +679,121 @@ export function App() {
             paddingBottom={1}
           >
             <text fg="#e2e8f0">Made with Love for Caroline Kortekaas</text>
+          </box>
+        </box>
+      ) : null}
+
+      {showTempToColorModal ? (
+        <box
+          position="absolute"
+          top={0}
+          left={0}
+          width="100%"
+          height="100%"
+          justifyContent="center"
+          alignItems="center"
+          zIndex={1100}
+        >
+          <box
+            title="Temp-to-Color matrix"
+            border
+            borderStyle="single"
+            borderColor="#22d3ee"
+            backgroundColor="#0b1220"
+            paddingLeft={2}
+            paddingRight={2}
+            paddingTop={1}
+            paddingBottom={2}
+            style={{ width: 78, height: 22, flexDirection: "column", gap: 1 }}
+          >
+            <text fg="#94a3b8">a: add row • d: delete row • ↑/↓: select • Esc: save/close</text>
+
+            <box style={{ flexDirection: "column", flexGrow: 1, flexShrink: 1, minHeight: 6 }}>
+              <box style={{ flexDirection: "row" }}>
+                <text fg="#64748b" content={`   tempL    tempH  clr`} />
+              </box>
+              <scrollbox
+                scrollY
+                scrollX={false}
+                viewportCulling
+                style={{ flexGrow: 1, flexShrink: 1, minHeight: 4 }}
+              >
+                <box style={{ flexDirection: "column", width: "100%" }}>
+                  {tempToColorDraft.length === 0 ? (
+                    <text fg="#64748b">No rows yet. Press a to add one.</text>
+                  ) : (
+                    tempToColorDraft.map((row, idx) => {
+                      const bg = idx === tempToColorSelectedIndex ? "#334155" : "transparent";
+                      const prefix = idx === tempToColorSelectedIndex ? "▶" : " ";
+                      const line = `${prefix} ${fmtInt(row.tempL)}  ${fmtInt(row.tempH)}  ${fmtColorNumber(row.color)}`;
+                      return <text key={`${idx}`} fg="#e2e8f0" bg={bg} content={line} />;
+                    })
+                  )}
+                </box>
+              </scrollbox>
+            </box>
+
+            {tempToColorIsAdding ? (
+              <box style={{ flexDirection: "column", gap: 1, flexShrink: 0, height: 7 }}>
+                <text fg="#ef4444" content={tempToColorError ?? " "} />
+                <text fg="#94a3b8">New row (Tab: next field • Enter: confirm • Esc: cancel)</text>
+                <box style={{ flexDirection: "column", gap: 0, height: 2 }}>
+                  <box style={{ flexDirection: "row", gap: 2, height: 1 }}>
+                    <box style={{ flexGrow: 1 }}>
+                      <text fg="#64748b">Temp low</text>
+                    </box>
+                    <box style={{ flexGrow: 1 }}>
+                      <text fg="#64748b">Temp high</text>
+                    </box>
+                    <box style={{ width: 14 }}>
+                      <text fg="#64748b">Color #</text>
+                    </box>
+                  </box>
+
+                  <box style={{ flexDirection: "row", gap: 2, height: 1 }}>
+                    <box style={{ flexGrow: 1 }}>
+                      <input
+                        placeholder="e.g. 0"
+                        focused={tempToColorNewRowField === 0}
+                        value={tempToColorNewRow.tempL}
+                        onInput={(value) =>
+                          setTempToColorNewRow((prev) => ({ ...prev, tempL: sanitizeIntText(value) }))
+                        }
+                        onSubmit={() => {
+                          setTempToColorNewRowField(1);
+                        }}
+                      />
+                    </box>
+                    <box style={{ flexGrow: 1 }}>
+                      <input
+                        placeholder="e.g. 5"
+                        focused={tempToColorNewRowField === 1}
+                        value={tempToColorNewRow.tempH}
+                        onInput={(value) =>
+                          setTempToColorNewRow((prev) => ({ ...prev, tempH: sanitizeIntText(value) }))
+                        }
+                        onSubmit={() => {
+                          setTempToColorNewRowField(2);
+                        }}
+                      />
+                    </box>
+                    <box style={{ width: 14 }}>
+                      <input
+                        placeholder="e.g. 3"
+                        focused={tempToColorNewRowField === 2}
+                        value={tempToColorNewRow.color}
+                        onInput={(value) =>
+                          setTempToColorNewRow((prev) => ({ ...prev, color: sanitizeIntText(value) }))
+                        }
+                        onSubmit={(value) => {
+                          tryConfirmTempToColorNewRow({ color: sanitizeIntText(value) });
+                        }}
+                      />
+                    </box>
+                  </box>
+                </box>
+              </box>
+            ) : null}
           </box>
         </box>
       ) : null}
