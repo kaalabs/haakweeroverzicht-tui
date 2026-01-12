@@ -30,8 +30,8 @@ function fmtInt(value: number): string {
 }
 
 function fmtColorNumber(value: number | null): string {
-  if (value === null) return " --";
-  return String(value).padStart(3, " ");
+  if (value === null) return "--";
+  return String(value);
 }
 
 function toggleCheckedFlag(flag: "Y" | "N"): "Y" | "N" {
@@ -641,8 +641,9 @@ export function App() {
                 const fg = d.checked === "Y" ? "#22c55e" : "#ef4444";
                 const bg = idx === daySelectedIndex ? "#334155" : "transparent";
                 const prefix = idx === daySelectedIndex ? "▶" : " ";
-                const mapped = colorForTemp(db?.tempToColorMatrix ?? [], d.tavg);
-                const line = `${prefix} ${d.date}  max ${fmtTemp(d.tmax)}  min ${fmtTemp(d.tmin)}  avg ${fmtTemp(d.tavg)}  clr ${fmtColorNumber(mapped)}  checked:${d.checked}`;
+                const matrix = db?.tempToColorMatrix ?? [];
+                const maxColor = colorForTemp(matrix, Math.round(d.tmax));
+                const line = `${prefix} ${d.date}  max ${fmtTemp(d.tmax)}  min ${fmtTemp(d.tmin)}  avg ${fmtTemp(d.tavg)}  clr ${fmtColorNumber(maxColor).padStart(3, " ")}`;
                 return <text key={d.date} fg={fg} bg={bg} content={line} />;
               })}
             </box>
@@ -725,7 +726,7 @@ export function App() {
                     tempToColorDraft.map((row, idx) => {
                       const bg = idx === tempToColorSelectedIndex ? "#334155" : "transparent";
                       const prefix = idx === tempToColorSelectedIndex ? "▶" : " ";
-                      const line = `${prefix} ${fmtInt(row.tempL)}  ${fmtInt(row.tempH)}  ${fmtColorNumber(row.color)}`;
+                      const line = `${prefix} ${fmtInt(row.tempL)}  ${fmtInt(row.tempH)}  ${fmtColorNumber(row.color).padStart(3, " ")}`;
                       return <text key={`${idx}`} fg="#e2e8f0" bg={bg} content={line} />;
                     })
                   )}
