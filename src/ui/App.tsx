@@ -5,6 +5,7 @@ import type { City, Db, TempToColorRow } from "../db";
 import { createEmptyDb, loadDb, saveDb } from "../db";
 import { geocodeTopResult, syncCityHistoricWeather } from "../openMeteo";
 import { VERSION } from "../version";
+import { theme } from "./theme";
 
 type FocusPanel = "add" | "cities" | "weather";
 
@@ -582,11 +583,11 @@ export function App() {
               paddingLeft: 1,
               paddingRight: 1,
               paddingTop: 1,
-              borderColor: focus === "add" ? "#22d3ee" : "#444",
+              borderColor: focus === "add" ? theme.border.active : theme.border.inactive,
               flexDirection: "column",
             }}
           >
-            <text fg="#94a3b8">Enter name, press Enter</text>
+            <text fg={theme.input.placeholder}>Enter name, press Enter</text>
             <input placeholder="e.g. Berlin" focused={focus === "add"} onSubmit={addCity} />
           </box>
 
@@ -597,7 +598,7 @@ export function App() {
             style={{
               flexGrow: 1,
               padding: 1,
-              borderColor: focus === "cities" ? "#22d3ee" : "#444",
+              borderColor: focus === "cities" ? theme.border.active : theme.border.inactive,
               flexDirection: "column",
             }}
           >
@@ -613,7 +614,7 @@ export function App() {
                 persistDb((prev) => ({ ...prev, selectedCityId: option.value }));
               }}
             />
-            {db && db.cities.length === 0 ? <text fg="#64748b">No cities yet</text> : null}
+            {db && db.cities.length === 0 ? <text fg={theme.text.muted}>No cities yet</text> : null}
           </box>
         </box>
 
@@ -624,7 +625,7 @@ export function App() {
           style={{
             flexGrow: 1,
             padding: 1,
-            borderColor: focus === "weather" ? "#22d3ee" : "#444",
+            borderColor: focus === "weather" ? theme.border.active : theme.border.inactive,
             flexDirection: "column",
           }}
           >
@@ -639,7 +640,7 @@ export function App() {
             <box style={{ flexDirection: "column", width: "100%" }}>
               {weatherDays.map((d, idx) => {
                 const fg = d.checked === "Y" ? "#22c55e" : "#ef4444";
-                const bg = idx === daySelectedIndex ? "#334155" : "transparent";
+                const bg = idx === daySelectedIndex ? theme.background.selection : theme.background.transparent;
                 const prefix = idx === daySelectedIndex ? "▶" : " ";
                 const matrix = db?.tempToColorMatrix ?? [];
                 const maxColor = colorForTemp(matrix, Math.round(d.tmax));
@@ -648,14 +649,14 @@ export function App() {
               })}
             </box>
           </scrollbox>
-          {!selectedCity ? <text fg="#64748b">Select a city to see historic data</text> : null}
-          {selectedCity && weatherDays.length === 0 ? <text fg="#64748b">No data yet (syncing)</text> : null}
+          {!selectedCity ? <text fg={theme.text.muted}>Select a city to see historic data</text> : null}
+          {selectedCity && weatherDays.length === 0 ? <text fg={theme.text.muted}>No data yet (syncing)</text> : null}
         </box>
       </box>
 
       <box style={{ width: "100%", flexDirection: "row", justifyContent: "space-between" }}>
-        <text fg="#64748b">Tab: next panel • c: temp-color matrix • d: delete city • ↑/↓ or j/k: move day • space: toggle checked • q/esc: quit</text>
-        <text fg="#a3a3a3">Haakweeroverzicht TUI v{VERSION}</text>
+        <text fg={theme.text.muted}>Tab: next panel • c: temp-color matrix • d: delete city • ↑/↓ or j/k: move day • space: toggle checked • q/esc: quit</text>
+        <text fg={theme.text.version}>Haakweeroverzicht TUI v{VERSION}</text>
       </box>
 
       {showStartupModal ? (
@@ -672,14 +673,14 @@ export function App() {
           <box
             border
             borderStyle="single"
-            borderColor="#22d3ee"
-            backgroundColor="#0b1220"
+            borderColor={theme.border.modal}
+            backgroundColor={theme.background.modal}
             paddingLeft={2}
             paddingRight={2}
             paddingTop={1}
             paddingBottom={1}
           >
-            <text fg="#e2e8f0">Made with Love for Caroline Kortekaas</text>
+            <text fg={theme.text.modalTitle}>Made with Love for Caroline Kortekaas</text>
           </box>
         </box>
       ) : null}
@@ -699,19 +700,19 @@ export function App() {
             title="Temp-to-Color matrix"
             border
             borderStyle="single"
-            borderColor="#22d3ee"
-            backgroundColor="#0b1220"
+            borderColor={theme.border.modal}
+            backgroundColor={theme.background.modal}
             paddingLeft={2}
             paddingRight={2}
             paddingTop={1}
             paddingBottom={2}
             style={{ width: 78, height: 22, flexDirection: "column", gap: 1 }}
           >
-            <text fg="#94a3b8">a: add row • d: delete row • ↑/↓: select • Esc: save/close</text>
+            <text fg={theme.input.placeholder}>a: add row • d: delete row • ↑/↓: select • Esc: save/close</text>
 
             <box style={{ flexDirection: "column", flexGrow: 1, flexShrink: 1, minHeight: 6 }}>
               <box style={{ flexDirection: "row" }}>
-                <text fg="#64748b" content={`   tempL    tempH  clr`} />
+                <text fg={theme.text.muted} content={`   tempL    tempH  clr`} />
               </box>
               <scrollbox
                 scrollY
@@ -721,13 +722,13 @@ export function App() {
               >
                 <box style={{ flexDirection: "column", width: "100%" }}>
                   {tempToColorDraft.length === 0 ? (
-                    <text fg="#64748b">No rows yet. Press a to add one.</text>
+                    <text fg={theme.text.muted}>No rows yet. Press a to add one.</text>
                   ) : (
                     tempToColorDraft.map((row, idx) => {
-                      const bg = idx === tempToColorSelectedIndex ? "#334155" : "transparent";
+                      const bg = idx === tempToColorSelectedIndex ? theme.background.selection : theme.background.transparent;
                       const prefix = idx === tempToColorSelectedIndex ? "▶" : " ";
                       const line = `${prefix} ${fmtInt(row.tempL)}  ${fmtInt(row.tempH)}  ${fmtColorNumber(row.color).padStart(3, " ")}`;
-                      return <text key={`${idx}`} fg="#e2e8f0" bg={bg} content={line} />;
+                      return <text key={`${idx}`} fg={theme.text.primary} bg={bg} content={line} />;
                     })
                   )}
                 </box>
@@ -736,18 +737,18 @@ export function App() {
 
             {tempToColorIsAdding ? (
               <box style={{ flexDirection: "column", gap: 1, flexShrink: 0, height: 7 }}>
-                <text fg="#ef4444" content={tempToColorError ?? " "} />
-                <text fg="#94a3b8">New row (Tab: next field • Enter: confirm • Esc: cancel)</text>
+                <text fg={theme.primary.error} content={tempToColorError ?? " "} />
+                <text fg={theme.input.placeholder}>New row (Tab: next field • Enter: confirm • Esc: cancel)</text>
                 <box style={{ flexDirection: "column", gap: 0, height: 2 }}>
                   <box style={{ flexDirection: "row", gap: 2, height: 1 }}>
                     <box style={{ flexGrow: 1 }}>
-                      <text fg="#64748b">Temp low</text>
+                      <text fg={theme.input.label}>Temp low</text>
                     </box>
                     <box style={{ flexGrow: 1 }}>
-                      <text fg="#64748b">Temp high</text>
+                      <text fg={theme.input.label}>Temp high</text>
                     </box>
                     <box style={{ width: 14 }}>
-                      <text fg="#64748b">Color #</text>
+                      <text fg={theme.input.label}>Color #</text>
                     </box>
                   </box>
 
